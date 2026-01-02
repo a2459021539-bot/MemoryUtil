@@ -62,7 +62,23 @@ I18N = {
         'virtual_memory': "虚拟内存",
         'ancestry_chain': "父级调用链：\n",
         'children': "\n直接子进程：\n",
-        'sys_cache_kernel': "系统内核/共享/缓存"
+        'sys_cache_kernel': "系统内核/共享/缓存",
+        'section_base': "🌐 基础设置",
+        'section_display': "📊 监控显示",
+        'section_optimize': "🚀 内存优化",
+        'section_exit': "🚪 退出行为",
+        'section_colors': "🎨 视觉颜色",
+        'section_cpu': "⚙️ CPU 配置管理",
+        'cpu_config_label': "已保存的 CPU 配置",
+        'cpu_col_name': "程序名称",
+        'cpu_col_path': "路径",
+        'cpu_col_cores': "CPU 核心",
+        'cpu_refresh': "刷新",
+        'cpu_delete': "删除选中",
+        'cpu_auto_apply': "开机自动应用 CPU 配置",
+        'done_btn': "完成",
+        'on': "开启",
+        'off': "关闭"
     },
     'en': {
         'title': "Memory Space Explorer",
@@ -120,7 +136,23 @@ I18N = {
         'virtual_memory': "Virtual",
         'ancestry_chain': "Ancestry Chain:\n",
         'children': "\nChildren:\n",
-        'sys_cache_kernel': "System Cache/Kernel"
+        'sys_cache_kernel': "System Cache/Kernel",
+        'section_base': "🌐 Basic Settings",
+        'section_display': "📊 Monitoring & Display",
+        'section_optimize': "🚀 Memory Optimization",
+        'section_exit': "🚪 Exit Behavior",
+        'section_colors': "🎨 Visual Colors",
+        'section_cpu': "⚙️ CPU Affinity Management",
+        'cpu_config_label': "Saved CPU Configurations",
+        'cpu_col_name': "Program",
+        'cpu_col_path': "Path",
+        'cpu_col_cores': "CPU Cores",
+        'cpu_refresh': "Refresh",
+        'cpu_delete': "Delete Selected",
+        'cpu_auto_apply': "Auto Apply CPU Affinity on Startup",
+        'done_btn': "Done",
+        'on': "ON",
+        'off': "OFF"
     }
 }
 

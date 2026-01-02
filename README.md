@@ -2,6 +2,16 @@
 
 **MemorySpaceExplorer** is a high-performance visualizer and optimizer for RAM and NVIDIA GPU VRAM on Windows. It uses a **TreeMap** layout to provide a clear, intuitive view of how your system resources are allocated.
 
+## 🖼 Screenshots
+
+| Main Interface (English) | Main Interface (Chinese) |
+| :---: | :---: |
+| ![English Interface](./pics/image%20en.png) | ![Chinese Interface](./pics/image%20zh.png) |
+
+| Collapsible Settings |
+| :---: |
+| ![Settings Page](./pics/image%20setting.png) |
+
 ## 📥 Download
 
 You can directly download the pre-built executable from the [dist/MemoryUitl.exe](./dist/MemoryUitl.exe) directory for immediate use without installing Python.

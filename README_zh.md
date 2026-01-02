@@ -2,6 +2,16 @@
 
 **MemorySpaceExplorer** 是一款专为 Windows 打造的高性能物理内存与 NVIDIA 显存可视化分析及优化工具。它采用 **矩形树图 (TreeMap)** 布局，为您提供直观、清晰的系统资源分配视图。
 
+## 🖼 截图展示
+
+| 主界面 (中文) | 主界面 (英文) |
+| :---: | :---: |
+| ![中文界面](./pics/image%20zh.png) | ![英文界面](./pics/image%20en.png) |
+
+| 折叠式设置面板 |
+| :---: |
+| ![设置页面](./pics/image%20setting.png) |
+
 **简体中文** | [English](./README.md)
 
 ---

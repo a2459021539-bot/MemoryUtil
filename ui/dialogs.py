@@ -303,7 +303,9 @@ class SettingsDialog(QDialog):
         self.container.setSpacing(20)
         self.container.setContentsMargins(10, 10, 15, 10)
         
-        layout_base = self._add_section("🌐 基础设置")
+        t = I18N[self.settings.get('lang', 'zh')]
+        
+        layout_base, self.sec_base = self._add_section(t.get('section_base', "🌐 基础设置"))
         self.lbl_lang = QLabel()
         self.combo_lang = QComboBox()
         self.combo_lang.addItem("简体中文", 'zh'); self.combo_lang.addItem("English", 'en')
@@ -314,7 +316,7 @@ class SettingsDialog(QDialog):
         self.spin_refresh.setValue(self.settings.get('refresh_rate', 2000) / 1000.0)
         self._add_row(layout_base, self.lbl_refresh, self.spin_refresh)
 
-        layout_disp = self._add_section("📊 监控显示")
+        layout_disp, self.sec_disp = self._add_section(t.get('section_display', "📊 监控显示"))
         self.lbl_view_mode = QLabel()
         mode_container = QWidget(); mode_container.setStyleSheet("background-color: transparent;")
         mode_h = QHBoxLayout(mode_container); mode_h.setContentsMargins(0,0,0,0)
@@ -355,7 +357,7 @@ class SettingsDialog(QDialog):
         startup_h.addStretch(); startup_h.addWidget(self.lbl_startup_text); startup_h.addWidget(self.btn_startup)
         self._add_row(layout_disp, self.lbl_startup, startup_container)
 
-        layout_opt = self._add_section("🚀 内存优化")
+        layout_opt, self.sec_opt = self._add_section(t.get('memory_optimization', "🚀 内存优化"))
         self.lbl_auto_opt = QLabel()
         auto_opt_container = QWidget(); auto_opt_container.setStyleSheet("background-color: transparent;")
         auto_opt_h = QHBoxLayout(auto_opt_container); auto_opt_h.setContentsMargins(0,0,0,0)
@@ -368,7 +370,7 @@ class SettingsDialog(QDialog):
         self.spin_opt_interval.setValue(self.settings.get('optimize_interval', 30000) / 1000.0)
         self._add_row(layout_opt, self.lbl_opt_interval, self.spin_opt_interval)
 
-        layout_close = self._add_section("🚪 退出行为")
+        layout_close, self.sec_close = self._add_section(t.get('section_exit', "🚪 退出行为"))
         self.lbl_close_behavior = QLabel()
         close_container = QWidget(); close_container.setStyleSheet("background-color: transparent;")
         close_h = QHBoxLayout(close_container); close_h.setContentsMargins(0,0,0,0)
@@ -377,7 +379,7 @@ class SettingsDialog(QDialog):
         close_h.addStretch(); close_h.addWidget(self.lbl_close_text); close_h.addWidget(self.btn_close_behavior)
         self._add_row(layout_close, self.lbl_close_behavior, close_container)
 
-        layout_color = self._add_section("🎨 视觉颜色")
+        layout_color, self.sec_color = self._add_section(t.get('section_colors', "🎨 视觉颜色"))
         self.color_buttons = {}
         color_types = [('system', 'color_system'), ('free', 'color_free'), ('gpu', 'color_gpu'), ('gpu_free', 'color_gpu_free'), ('vmem', 'color_vmem')]
         colors = self.settings.get('colors', {})
@@ -390,14 +392,13 @@ class SettingsDialog(QDialog):
             self._add_row(layout_color, lbl, btn)
             self.color_buttons[key] = (lbl, btn)
 
-        layout_cpu = self._add_section("⚙️ CPU 配置管理")
+        layout_cpu, self.sec_cpu = self._add_section(t.get('section_cpu', "⚙️ CPU Affinity Management"))
         self.lbl_cpu_configs = QLabel()
-        lang = self.settings.get('lang', 'zh')
-        self.lbl_cpu_configs.setText("已保存的 CPU 配置" if lang == 'zh' else "Saved CPU Configurations")
+        self.lbl_cpu_configs.setText(t.get('cpu_config_label', "Saved CPU Configurations"))
         layout_cpu.addWidget(self.lbl_cpu_configs)
         self.cpu_config_list = QTableWidget()
         self.cpu_config_list.setColumnCount(3)
-        self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if lang == 'zh' else ["Program", "Path", "CPU Cores"])
+        self.cpu_config_list.setHorizontalHeaderLabels([t.get('cpu_col_name', "Program"), t.get('cpu_col_path', "Path"), t.get('cpu_col_cores', "CPU Cores")])
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
@@ -410,15 +411,16 @@ class SettingsDialog(QDialog):
         self.cpu_config_list.setMaximumHeight(200)
         layout_cpu.addWidget(self.cpu_config_list)
         cpu_btn_layout = QHBoxLayout()
-        self.btn_refresh_cpu = QPushButton("刷新" if lang == 'zh' else "Refresh")
+        self.btn_refresh_cpu = QPushButton(t.get('cpu_refresh', "Refresh"))
         self.btn_refresh_cpu.clicked.connect(self.refresh_cpu_configs)
-        self.btn_delete_cpu = QPushButton("删除选中" if lang == 'zh' else "Delete Selected")
+        self.btn_delete_cpu = QPushButton(t.get('cpu_delete', "Delete Selected"))
         self.btn_delete_cpu.clicked.connect(self.delete_cpu_config)
         cpu_btn_layout.addWidget(self.btn_refresh_cpu)
         cpu_btn_layout.addWidget(self.btn_delete_cpu)
         cpu_btn_layout.addStretch()
         layout_cpu.addLayout(cpu_btn_layout)
         self.lbl_auto_apply_cpu = QLabel()
+        self.lbl_auto_apply_cpu.setText(t.get('cpu_auto_apply', "Auto Apply CPU Affinity on Startup"))
         auto_apply_container = QWidget(); auto_apply_container.setStyleSheet("background-color: transparent;")
         auto_apply_h = QHBoxLayout(auto_apply_container); auto_apply_h.setContentsMargins(0,0,0,0)
         self.btn_auto_apply_cpu = SwitchButton(); self.btn_auto_apply_cpu.setChecked(self.settings.get('auto_apply_cpu_affinity', False))
@@ -431,7 +433,7 @@ class SettingsDialog(QDialog):
         main_layout.addWidget(scroll)
 
         btn_layout = QHBoxLayout()
-        self.btn_done = QPushButton("完成")
+        self.btn_done = QPushButton(t.get('done_btn', "Done"))
         self.btn_done.setFixedSize(120, 35)
         self.btn_done.setCursor(Qt.CursorShape.PointingHandCursor); self.btn_done.setDefault(True)
         self.btn_done.setStyleSheet("""
@@ -489,10 +491,10 @@ class SettingsDialog(QDialog):
                 arrow_label.setAlignment(Qt.AlignmentFlag.AlignCenter); arrow_label.setFixedSize(16, 16)
                 arrow_label.setStyleSheet("QLabel { color: #00FFCC; font-size: 11px; font-weight: bold; background-color: transparent; padding: 0px; }")
                 layout.addWidget(arrow_label, alignment=Qt.AlignmentFlag.AlignVCenter)
-                title = QLabel(text); title.setObjectName("GroupTitle")
-                title.setStyleSheet("color: #00FFCC; font-size: 14px; font-weight: bold; background-color: transparent; padding: 0px; margin: 0px; line-height: 1.0;")
-                title.setCursor(Qt.CursorShape.PointingHandCursor); title.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter); title.setMinimumHeight(16)
-                layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignVCenter); layout.addStretch()
+                self.title_label = QLabel(text); self.title_label.setObjectName("GroupTitle")
+                self.title_label.setStyleSheet("color: #00FFCC; font-size: 14px; font-weight: bold; background-color: transparent; padding: 0px; margin: 0px; line-height: 1.0;")
+                self.title_label.setCursor(Qt.CursorShape.PointingHandCursor); self.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter); self.title_label.setMinimumHeight(16)
+                layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignVCenter); layout.addStretch()
             def mousePressEvent(self, event):
                 if event.button() == Qt.MouseButton.LeftButton:
                     is_expanded = self.content_widget.isVisible(); self.content_widget.setVisible(not is_expanded)
@@ -503,7 +505,7 @@ class SettingsDialog(QDialog):
         arrow_label = QLabel("▼"); clickable_title = ClickableTitle(title_text, content_widget, arrow_label)
         panel_layout.addWidget(clickable_title); panel_layout.addWidget(content_widget)
         self.container.addWidget(panel)
-        return content_layout
+        return content_layout, clickable_title
 
     def _add_row(self, parent_layout, label_widget, control_widget):
         row = QHBoxLayout()
@@ -538,13 +540,24 @@ class SettingsDialog(QDialog):
         self.lbl_free.setText(t['show_free']); self.lbl_gpu_free.setText(t['show_gpu_free'])
         self.lbl_gpu_used.setText(t['show_gpu_used']); self.lbl_startup.setText(t['auto_startup'])
         self.lbl_close_behavior.setText(t['close_behavior_label'])
+        
+        # 更新分区标题
+        if hasattr(self, 'sec_base'): self.sec_base.title_label.setText(t.get('section_base', "🌐 基础设置"))
+        if hasattr(self, 'sec_disp'): self.sec_disp.title_label.setText(t.get('section_display', "📊 监控显示"))
+        if hasattr(self, 'sec_opt'): self.sec_opt.title_label.setText(t.get('section_optimize', "🚀 内存优化"))
+        if hasattr(self, 'sec_close'): self.sec_close.title_label.setText(t.get('section_exit', "🚪 退出行为"))
+        if hasattr(self, 'sec_color'): self.sec_color.title_label.setText(t.get('section_colors', "🎨 视觉颜色"))
+        if hasattr(self, 'sec_cpu'): self.sec_cpu.title_label.setText(t.get('section_cpu', "⚙️ CPU 配置管理"))
+        
+        # 更新完成按钮
+        if hasattr(self, 'btn_done'): self.btn_done.setText(t.get('done_btn', "完成"))
+
         if hasattr(self, 'lbl_cpu_configs'):
-            lang = self.settings.get('lang', 'zh')
-            self.lbl_cpu_configs.setText("已保存的 CPU 配置" if lang == 'zh' else "Saved CPU Configurations")
-            self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if lang == 'zh' else ["Program", "Path", "CPU Cores"])
-            self.btn_refresh_cpu.setText("刷新" if lang == 'zh' else "Refresh")
-            self.btn_delete_cpu.setText("删除选中" if lang == 'zh' else "Delete Selected")
-            self.lbl_auto_apply_cpu.setText("开机自动应用 CPU 配置" if lang == 'zh' else "Auto Apply CPU Affinity on Startup")
+            self.lbl_cpu_configs.setText(t.get('cpu_config_label', "Saved CPU Configurations"))
+            self.cpu_config_list.setHorizontalHeaderLabels([t.get('cpu_col_name', "Program"), t.get('cpu_col_path', "Path"), t.get('cpu_col_cores', "CPU Cores")])
+            self.btn_refresh_cpu.setText(t.get('cpu_refresh', "Refresh"))
+            self.btn_delete_cpu.setText(t.get('cpu_delete', "Delete Selected"))
+            self.lbl_auto_apply_cpu.setText(t.get('cpu_auto_apply', "Auto Apply CPU Affinity on Startup"))
         for key, label_key in [('system', 'color_system'), ('free', 'color_free'), ('gpu', 'color_gpu'), ('gpu_free', 'color_gpu_free'), ('vmem', 'color_vmem')]:
             if key in self.color_buttons: self.color_buttons[key][0].setText(t[label_key])
         self.combo_lang.blockSignals(True)
@@ -570,7 +583,7 @@ class SettingsDialog(QDialog):
         
         for lbl, btn in toggles:
             if lbl:
-                lbl.setText(("开启" if btn.isChecked() else "关闭") if lang == 'zh' else ("ON" if btn.isChecked() else "OFF"))
+                lbl.setText(t.get('on', "ON") if btn.isChecked() else t.get('off', "OFF"))
 
     def sync_settings(self):
         self.settings['refresh_rate'] = int(self.spin_refresh.value() * 1000)
