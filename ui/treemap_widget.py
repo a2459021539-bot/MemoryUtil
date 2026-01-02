@@ -273,17 +273,20 @@ class TreeMapWidget(QWidget):
         return f"{val:.1f}T"
 
     def contextMenuEvent(self, event):
-        item = self._get_item_at(event.position())
+        pos = QPointF(event.pos())
+        item = self._get_item_at(pos)
         if item:
-            self.itemRightClicked.emit(item, event.globalPosition())
+            self.itemRightClicked.emit(item, QPointF(event.globalPos()))
 
     def mouseDoubleClickEvent(self, event):
-        item = self._get_item_at(event.position())
+        pos = QPointF(event.pos())
+        item = self._get_item_at(pos)
         if item:
             self.itemDoubleClicked.emit(item)
 
     def mouseMoveEvent(self, event):
-        item = self._get_item_at(event.position())
+        pos = QPointF(event.pos())
+        item = self._get_item_at(pos)
         if item != self.hovered_item:
             self.hovered_item = item
             self.update()
@@ -294,6 +297,10 @@ class TreeMapWidget(QWidget):
             self.setToolTip("")
 
     def _get_item_at(self, pos):
+        # 确保 pos 是 QPointF 类型，以匹配 QRectF.contains
+        if not isinstance(pos, QPointF):
+            pos = QPointF(pos)
+            
         # 优先检测子节点（进程）
         for group in self.root_items:
             if group.children:
@@ -305,4 +312,3 @@ class TreeMapWidget(QWidget):
             if group.rect.contains(pos):
                 return group
         return None
-

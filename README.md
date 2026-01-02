@@ -23,28 +23,31 @@ You can directly download the pre-built executable from the [dist/MemoryUitl.exe
 ## ✨ Key Features
 
 ### 📊 Visual Resource Analysis
-- **TreeMap Visualization**: Uses a high-performance squarified treemap algorithm to display RAM, Swap, and VRAM usage.
+- **TreeMap Visualization**: Uses a high-performance squarified treemap algorithm to dynamically display RAM, Swap, and VRAM usage.
+- **Process Inner-View**: Each process block is internally split into **[Physical Memory | Virtual Memory]** sub-regions, identified by different colors (Blue/Orange) for a clear memory composition view.
 - **Dual View Modes**:
-  - **Program Mode**: Aggregates processes from the same application (e.g., Chrome tabs) to identify the biggest resource consumers.
+  - **Program Mode**: Automatically aggregates all child processes of the same application (e.g., Chrome tabs, VS Code extensions) to quickly spot memory hogs.
   - **Process Mode**: Shows individual PIDs for granular control.
 
 ### 🎮 Gaming & Performance
-- **Game Mode (Auto-Pause)**: Automatically detects full-screen/borderless games and pauses monitoring/optimization to ensure zero performance impact. A 🎮 icon appears on the map when active.
-- **Dynamic Tray Icon**: The system tray icon features a 4-bar real-time chart:
-  - **Left 2 bars**: RAM usage.
-  - **Right 2 bars**: GPU VRAM usage.
-- **Smart Optimization**: Periodically releases idle process working sets using Windows APIs to keep your system snappy.
+- **Game Mode (Auto-Pause)**: Smart detection of full-screen or borderless games. When a game is detected, the app enters a "Sleep" state (refresh rate drops to 30s) and pauses heavy monitoring logic to ensure zero impact on game FPS. A 🎮 icon appears on the map when active.
+- **Single Instance Protection**: Uses a Local Server mechanism to ensure only one instance of the program runs globally, preventing resource conflicts.
+- **Dynamic Tray Icon**: The system tray icon features a 4-bar real-time dynamic chart:
+  - **Left 2 bars**: Physical RAM usage percentage.
+  - **Right 2 bars**: GPU VRAM usage percentage.
+- **Smart Memory Optimization**: Periodically releases the physical memory occupied by idle processes using the Windows Working Set API.
 
-### 🛠 Advanced GPU & CPU Management
-- **Precision GPU Tracking**: Combines `pynvml`, `nvidia-smi`, and PowerShell performance counters with **LUID matching** to accurately identify process-level VRAM usage, even in multi-GPU setups.
-- **CPU Affinity**: View process chains and set CPU core affinity directly from the right-click menu.
-- **Permission Handling**: Automatically attempts to fetch process names using Windows API if standard methods fail due to permissions.
+### 🛠 Advanced Management
+- **Precision GPU Tracking**: Combines `pynvml`, `nvidia-smi`, and Windows performance counters with **LUID Hardware ID matching** to accurately identify process-level VRAM usage (fully supports multi-GPU setups).
+- **CPU Affinity Management**: Records and automatically applies CPU core binding settings for processes, ideal for limiting or optimizing performance for specific apps.
+- **Process Chain Analysis**: Right-click to view the "Ancestor" and "Descendant" relationship chain of a process to understand complex process trees.
 
 ### 🎨 Modern UI & Experience
-- **Collapsible Settings**: Manage complex configurations with an organized, collapsible interface.
-- **Customizable Themes**: Adjust colors for system components, GPU, and free memory.
-- **I18N Support**: Fully supports English and Simplified Chinese, managed through a centralized configuration.
-- **User-Centric Storage**: Configuration is stored in the user's `Documents` folder for easy access and permission safety.
+- **Collapsible Settings**: Manage a vast array of configuration options with a modern, collapsible UI to keep the interface clean.
+- **Real-time Search & Filtering**: Quickly find specific processes in the detailed list view.
+- **Customizable Themes**: Freely adjust display colors for system memory, GPU memory, virtual memory, and free space.
+- **I18N Support**: Full support for instant switching between English and Simplified Chinese, with all UI text centrally managed.
+- **Safe Configuration Storage**: Config files are stored in the user's `Documents\MemorySpaceExplorer` folder, following Windows standards and avoiding permission issues.
 
 ---
 
@@ -68,6 +71,23 @@ You can directly download the pre-built executable from the [dist/MemoryUitl.exe
    pip install -r requirements.txt
    ```
    *(Required: `PyQt6`, `psutil`, `pynvml`)*
+
+---
+
+## ❓ Troubleshooting
+
+### 1. Error: `TypeError: argument 1 has unexpected type 'QPoint'`
+This is due to strict type checking for the `contains()` method in PyQt6.
+- **Solution**: 
+  - If you are a **Developer**: Ensure you have pulled the latest code. I have explicitly converted all `QPoint` instances to `QPointF`.
+  - **Clear Cache**: Delete the `__pycache__` folder in the project.
+  - **Rebuild**: If you are running the EXE, make sure to execute `pyinstaller --clean MemoryUitl.spec` to regenerate it.
+
+### 2. GPU VRAM shows as 0 or processes are not recognized
+- **Solution**: 
+  - Ensure NVIDIA drivers are installed.
+  - Try running the program as **Administrator**.
+  - Check if the `nvidia-smi` command is available in your system.
 
 ---
 
