@@ -40,6 +40,17 @@
 
 ---
 
+## 💾 获取程序
+
+### 1. 直接下载 (推荐)
+您可以直接从项目的 `dist` 目录下载已经构建好的可执行文件，无需安装 Python 环境：
+- 📥 **[下载 MemoryUitl.exe](./dist/MemoryUitl.exe)**
+
+### 2. 源码运行
+如果您希望从源码运行，请参考下方的安装步骤。
+
+---
+
 ## 📦 安装步骤
 
 1. **获取代码**
@@ -66,6 +77,25 @@
    - **左键双击**: 查看聚合组的详细进程列表。
    - **右键单击**: 打开管理菜单（定位文件、结束进程、CPU 亲和性）。
    - **托盘图标**: 悬停查看简报，右键快速操作。
+
+---
+
+## 🏗 自行打包为 EXE
+
+如果您修改了代码并希望自行生成 EXE 文件，请按照以下步骤操作：
+
+1. **安装 PyInstaller**:
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **执行打包命令**:
+   ```bash
+   pyinstaller --noconsole --onefile --name "MemoryUitl" --version-file file_version_info.txt --clean main.py
+   ```
+
+3. **版本信息**: 
+   您可以编辑 `file_version_info.txt` 来修改生成的 EXE 属性（如版权、版本号等）。
 
 ---
 

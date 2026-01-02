@@ -2,6 +2,10 @@
 
 **MemorySpaceExplorer** is a high-performance visualizer and optimizer for RAM and NVIDIA GPU VRAM on Windows. It uses a **TreeMap** layout to provide a clear, intuitive view of how your system resources are allocated.
 
+## 📥 Download
+
+You can directly download the pre-built executable from the [dist/MemoryUitl.exe](./dist/MemoryUitl.exe) directory for immediate use without installing Python.
+
 [简体中文](./README_zh.md) | **English**
 
 ---
@@ -53,6 +57,24 @@
    pip install -r requirements.txt
    ```
    *(Required: `PyQt6`, `psutil`, `pynvml`)*
+
+---
+
+## 🛠 Build from Source
+
+If you want to build the executable yourself:
+
+1. **Install PyInstaller**
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. **Run Build Command**
+   ```bash
+   pyinstaller --noconsole --onefile --name "MemoryUitl" --version-file file_version_info.txt --clean main.py
+   ```
+
+The built EXE will be generated in the `dist/` folder.
 
 ---
 
