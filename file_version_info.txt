@@ -1,0 +1,32 @@
+# UTF-8
+# VSVersionInfo 配置文件 - 用于设置 EXE 文件属性
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # 文件版本和产品版本，必须是四个数字组成的元组 (major, minor, micro, build)
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'080404b0', # 简体中文 (0804) Unicode (04b0)
+        [StringStruct(u'CompanyName', u'HYD Workspace'),
+        StringStruct(u'FileDescription', u'Memory Space Explorer - 内存云图分析工具'),
+        StringStruct(u'FileVersion', u'1.0.0.0'),
+        StringStruct(u'InternalName', u'MemorySpaceExplorer'),
+        StringStruct(u'LegalCopyright', u'Copyright (C) 2026 HYD. All rights reserved.'),
+        StringStruct(u'OriginalFilename', u'MemorySpaceExplorer.exe'),
+        StringStruct(u'ProductName', u'Memory Space Explorer'),
+        StringStruct(u'ProductVersion', u'1.0.0.0')])
+      ]), 
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])]) # 2052 是中文代码
+  ]
+)
+
