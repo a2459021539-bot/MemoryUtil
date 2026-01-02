@@ -29,6 +29,7 @@
 ### 🎨 现代 UI 体验
 - **折叠式设置**: 采用折叠面板管理复杂配置，界面井然有序。
 - **自定义主题**: 可调整系统、GPU 及可用内存的色块颜色。
+- **多语言支持 (I18N)**: 完整支持中英文切换，所有文本通过 `config.py` 统一治理。
 - **文档路径存储**: 配置文件存放在用户“文档”文件夹中，安全且易于访问。
 
 ---
@@ -89,13 +90,24 @@
    pip install pyinstaller
    ```
 
-2. **执行打包命令**:
+2. **执行打包命令 (推荐使用 Spec 文件)**:
    ```bash
-   pyinstaller --noconsole --onefile --name "MemoryUitl" --version-file file_version_info.txt --clean main.py
+   pyinstaller --clean MemoryUitl.spec
    ```
+   *(注：由于项目已进行模块化拆分，直接打包 `main.py` 可能会导致缺少模块。使用 `.spec` 文件可确保所有子文件夹都被正确包含。)*
 
 3. **版本信息**: 
    您可以编辑 `file_version_info.txt` 来修改生成的 EXE 属性（如版权、版本号等）。
+
+---
+
+## 📂 项目结构
+
+项目经过重构，采用了模块化设计以提高可维护性：
+- `main.py`: 应用程序入口及主窗口。
+- `config.py`: 多语言治理 (I18N) 及全局配置管理。
+- `ui/`: 包含所有 UI 组件和对话框。
+- `utils/`: 包含核心布局算法、数据采集逻辑及系统辅助工具。
 
 ---
 

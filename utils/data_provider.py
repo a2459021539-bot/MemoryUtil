@@ -6,7 +6,7 @@ import time
 import re
 import xml.etree.ElementTree as ET
 import traceback
-from .treemap_logic import TreeMapItem
+from utils.treemap_logic import TreeMapItem
 from config import I18N
 
 try:

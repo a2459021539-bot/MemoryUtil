@@ -143,7 +143,7 @@ class TreeMapWidget(QWidget):
         
         # 绘制背景圆圈
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
         painter.drawEllipse(rect)
         

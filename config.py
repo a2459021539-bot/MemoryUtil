@@ -140,7 +140,7 @@ DEFAULT_COLORS = {
 }
 
 APP_CONFIG = {
-    'refresh_interval': 2.0,
+    'refresh_rate': 2000,
     'lang': 'zh',
     'show_free': True,
     'show_gpu_free': True,
@@ -153,23 +153,43 @@ APP_CONFIG = {
     'colors': DEFAULT_COLORS.copy()
 }
 
-CONFIG_FILE = "config.json"
-DOCS_APP_DIR = os.path.join(os.path.expanduser("~"), "Documents", "MemorySpaceExplorer")
+def get_docs_dir():
+    """获取用户文档目录的可靠方法"""
+    if os.name == 'nt':
+        try:
+            import ctypes
+            from ctypes import wintypes
+            CSIDL_PERSONAL = 5  # My Documents
+            SHGFP_TYPE_CURRENT = 0
+            buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
+            # 使用 shell32.SHGetFolderPathW 获取真实的“文档”路径（处理路径重定向或中文系统）
+            ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buf)
+            if buf.value:
+                return buf.value
+        except:
+            pass
+    
+    # 备选方案 1: 检查 Windows 环境变量
+    if os.name == 'nt' and 'USERPROFILE' in os.environ:
+        # 尝试常见的几个可能路径 (Windows 默认可能叫 Documents 或 文档)
+        for folder in ['Documents', '文档']:
+            path = os.path.join(os.environ['USERPROFILE'], folder)
+            if os.path.exists(path):
+                return path
+
+    # 备选方案 2: 用户家目录
+    return os.path.join(os.path.expanduser("~"), "Documents")
+
+DOCS_APP_DIR = os.path.join(get_docs_dir(), "MemorySpaceExplorer")
 DOCS_CONFIG_FILE = os.path.join(DOCS_APP_DIR, "config.json")
 
 def load_settings():
     settings = APP_CONFIG.copy()
     
-    # 优先从文档目录读取配置
-    actual_path = None
+    # 【强制】只从文档目录读取配置
     if os.path.exists(DOCS_CONFIG_FILE):
-        actual_path = DOCS_CONFIG_FILE
-    elif os.path.exists(CONFIG_FILE):
-        actual_path = CONFIG_FILE
-        
-    if actual_path:
         try:
-            with open(actual_path, 'r', encoding='utf-8') as f:
+            with open(DOCS_CONFIG_FILE, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
                 if isinstance(loaded, dict):
                     # 深度合并，确保 colors 等嵌套字典被正确合并
@@ -181,6 +201,10 @@ def load_settings():
                             settings[k] = v
         except:
             pass
+    else:
+        # 如果没有任何配置文件，则立即在文档目录创建一个默认的
+        # 显式设置 merge_with_existing=False 以防止递归
+        save_settings(settings, merge_with_existing=False)
             
     # 最终确保 lang 合法
     if settings.get('lang') not in I18N:
@@ -188,26 +212,26 @@ def load_settings():
         
     return settings
 
-def save_settings(settings):
-    # 确保 settings 是完整的，如果不是，则先加载现有配置进行合并
-    full_settings = load_settings()
-    full_settings.update(settings)
+def save_settings(settings, merge_with_existing=True):
+    """
+    保存设置
+    :param settings: 要保存的设置字典
+    :param merge_with_existing: 是否与现有文件中的设置合并。如果是初次创建文件，应设为 False 以避免递归。
+    """
+    if merge_with_existing:
+        full_settings = load_settings()
+        full_settings.update(settings)
+    else:
+        full_settings = settings
     
     try:
-        # 总是保存到文档目录
+        # 【强制】只保存到文档目录
         if not os.path.exists(DOCS_APP_DIR):
             os.makedirs(DOCS_APP_DIR)
         with open(DOCS_CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(full_settings, f, indent=4, ensure_ascii=False)
-    except:
-        pass
-    
-    try:
-        # 同时保存到程序目录（如果权限允许）
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(full_settings, f, indent=4, ensure_ascii=False)
-    except:
-        pass
+    except Exception as e:
+        print(f"Critical Error: Failed to save config to Documents: {e}")
 
 def get_text(key, lang='zh'):
     return I18N.get(lang, I18N['zh']).get(key, key)

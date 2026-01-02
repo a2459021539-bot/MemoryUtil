@@ -3,10 +3,23 @@
 
 a = Analysis(
     ['main.py'],
-    pathex=[],
+    pathex=['.'],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'psutil', 
+        'pynvml', 
+        'config',
+        'ui',
+        'ui.components', 
+        'ui.dialogs', 
+        'ui.treemap_widget', 
+        'utils',
+        'utils.treemap_logic', 
+        'utils.data_provider', 
+        'utils.worker', 
+        'utils.system_utils'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

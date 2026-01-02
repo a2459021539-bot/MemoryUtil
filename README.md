@@ -33,6 +33,7 @@ You can directly download the pre-built executable from the [dist/MemoryUitl.exe
 ### 🎨 Modern UI & Experience
 - **Collapsible Settings**: Manage complex configurations with an organized, collapsible interface.
 - **Customizable Themes**: Adjust colors for system components, GPU, and free memory.
+- **I18N Support**: Fully supports English and Simplified Chinese, managed through a centralized configuration.
 - **User-Centric Storage**: Configuration is stored in the user's `Documents` folder for easy access and permission safety.
 
 ---
@@ -69,12 +70,23 @@ If you want to build the executable yourself:
    pip install pyinstaller
    ```
 
-2. **Run Build Command**
+2. **Run Build Command (Using Spec File)**
    ```bash
-   pyinstaller --noconsole --onefile --name "MemoryUitl" --version-file file_version_info.txt --clean main.py
+   pyinstaller --clean MemoryUitl.spec
    ```
+   *(Note: The project structure is now modular. Using the `.spec` file ensures all sub-modules are correctly included.)*
 
 The built EXE will be generated in the `dist/` folder.
+
+---
+
+## 📂 Project Structure
+
+The project has been refactored for better maintainability:
+- `main.py`: Application entry point.
+- `config.py`: Internationalization (I18N) and global configuration.
+- `ui/`: UI components and dialogs.
+- `utils/`: Core algorithms, data providers, and system utilities.
 
 ---
 

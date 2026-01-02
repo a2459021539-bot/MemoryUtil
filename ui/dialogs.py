@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                              QWidget, QFrame, QColorDialog, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QTimer
 from PyQt6.QtGui import QColor, QFontMetrics
-from .components import SwitchButton
+from ui.components import SwitchButton
 from config import I18N, save_settings, DOCS_CONFIG_FILE
 
 class ProcessChainWindow(QDialog):
@@ -307,11 +307,11 @@ class SettingsDialog(QDialog):
         self.lbl_lang = QLabel()
         self.combo_lang = QComboBox()
         self.combo_lang.addItem("简体中文", 'zh'); self.combo_lang.addItem("English", 'en')
-        self.combo_lang.setCurrentIndex(self.combo_lang.findData(self.settings['lang']))
+        self.combo_lang.setCurrentIndex(self.combo_lang.findData(self.settings.get('lang', 'zh')))
         self._add_row(layout_base, self.lbl_lang, self.combo_lang)
         self.lbl_refresh = QLabel()
         self.spin_refresh = QDoubleSpinBox(); self.spin_refresh.setRange(0.1, 60.0)
-        self.spin_refresh.setValue(self.settings['refresh_rate'] / 1000.0)
+        self.spin_refresh.setValue(self.settings.get('refresh_rate', 2000) / 1000.0)
         self._add_row(layout_base, self.lbl_refresh, self.spin_refresh)
 
         layout_disp = self._add_section("📊 监控显示")
@@ -380,21 +380,24 @@ class SettingsDialog(QDialog):
         layout_color = self._add_section("🎨 视觉颜色")
         self.color_buttons = {}
         color_types = [('system', 'color_system'), ('free', 'color_free'), ('gpu', 'color_gpu'), ('gpu_free', 'color_gpu_free'), ('vmem', 'color_vmem')]
+        colors = self.settings.get('colors', {})
         for key, label_key in color_types:
             lbl = QLabel(); btn = QPushButton(); btn.setFixedSize(45, 22); btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setAutoDefault(False); btn.setDefault(False); btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            btn.setStyleSheet(f"background-color: {self.settings['colors'][key]}; border: 1px solid #555; border-radius: 4px;")
+            c_val = colors.get(key, "#888888")
+            btn.setStyleSheet(f"background-color: {c_val}; border: 1px solid #555; border-radius: 4px;")
             btn.clicked.connect(lambda checked, k=key: self.pick_color(k))
             self._add_row(layout_color, lbl, btn)
             self.color_buttons[key] = (lbl, btn)
 
         layout_cpu = self._add_section("⚙️ CPU 配置管理")
         self.lbl_cpu_configs = QLabel()
-        self.lbl_cpu_configs.setText("已保存的 CPU 配置" if self.settings['lang'] == 'zh' else "Saved CPU Configurations")
+        lang = self.settings.get('lang', 'zh')
+        self.lbl_cpu_configs.setText("已保存的 CPU 配置" if lang == 'zh' else "Saved CPU Configurations")
         layout_cpu.addWidget(self.lbl_cpu_configs)
         self.cpu_config_list = QTableWidget()
         self.cpu_config_list.setColumnCount(3)
-        self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if self.settings['lang'] == 'zh' else ["Program", "Path", "CPU Cores"])
+        self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if lang == 'zh' else ["Program", "Path", "CPU Cores"])
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.cpu_config_list.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
@@ -407,9 +410,9 @@ class SettingsDialog(QDialog):
         self.cpu_config_list.setMaximumHeight(200)
         layout_cpu.addWidget(self.cpu_config_list)
         cpu_btn_layout = QHBoxLayout()
-        self.btn_refresh_cpu = QPushButton("刷新" if self.settings['lang'] == 'zh' else "Refresh")
+        self.btn_refresh_cpu = QPushButton("刷新" if lang == 'zh' else "Refresh")
         self.btn_refresh_cpu.clicked.connect(self.refresh_cpu_configs)
-        self.btn_delete_cpu = QPushButton("删除选中" if self.settings['lang'] == 'zh' else "Delete Selected")
+        self.btn_delete_cpu = QPushButton("删除选中" if lang == 'zh' else "Delete Selected")
         self.btn_delete_cpu.clicked.connect(self.delete_cpu_config)
         cpu_btn_layout.addWidget(self.btn_refresh_cpu)
         cpu_btn_layout.addWidget(self.btn_delete_cpu)
@@ -513,15 +516,19 @@ class SettingsDialog(QDialog):
         self.settingsChanged.emit()
 
     def pick_color(self, key):
-        c = QColorDialog.getColor(QColor(self.settings['colors'][key]), self, "Select Color")
+        current_color = self.settings.get('colors', {}).get(key, "#888888")
+        c = QColorDialog.getColor(QColor(current_color), self, "Select Color")
         if c.isValid():
             hex_c = c.name().upper()
+            if 'colors' not in self.settings: self.settings['colors'] = {}
             self.settings['colors'][key] = hex_c
             self.color_buttons[key][1].setStyleSheet(f"background-color: {hex_c}; border: 1px solid #666; border-radius: 3px;")
             self.settingsChanged.emit()
 
     def retranslate_ui(self):
-        t = I18N[self.settings['lang']]
+        lang = self.settings.get('lang', 'zh')
+        if lang not in I18N: lang = 'zh'
+        t = I18N[lang]
         self.setWindowTitle(t['settings_title'])
         self.lbl_lang.setText(t['lang_label']); self.lbl_refresh.setText(t['refresh_label'])
         self.spin_refresh.setSuffix(" s"); self.lbl_view_mode.setText(t['view_mode_label'])
@@ -532,11 +539,12 @@ class SettingsDialog(QDialog):
         self.lbl_gpu_used.setText(t['show_gpu_used']); self.lbl_startup.setText(t['auto_startup'])
         self.lbl_close_behavior.setText(t['close_behavior_label'])
         if hasattr(self, 'lbl_cpu_configs'):
-            self.lbl_cpu_configs.setText("已保存的 CPU 配置" if self.settings['lang'] == 'zh' else "Saved CPU Configurations")
-            self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if self.settings['lang'] == 'zh' else ["Program", "Path", "CPU Cores"])
-            self.btn_refresh_cpu.setText("刷新" if self.settings['lang'] == 'zh' else "Refresh")
-            self.btn_delete_cpu.setText("删除选中" if self.settings['lang'] == 'zh' else "Delete Selected")
-            self.lbl_auto_apply_cpu.setText("开机自动应用 CPU 配置" if self.settings['lang'] == 'zh' else "Auto Apply CPU Affinity on Startup")
+            lang = self.settings.get('lang', 'zh')
+            self.lbl_cpu_configs.setText("已保存的 CPU 配置" if lang == 'zh' else "Saved CPU Configurations")
+            self.cpu_config_list.setHorizontalHeaderLabels(["程序名称", "路径", "CPU 核心"] if lang == 'zh' else ["Program", "Path", "CPU Cores"])
+            self.btn_refresh_cpu.setText("刷新" if lang == 'zh' else "Refresh")
+            self.btn_delete_cpu.setText("删除选中" if lang == 'zh' else "Delete Selected")
+            self.lbl_auto_apply_cpu.setText("开机自动应用 CPU 配置" if lang == 'zh' else "Auto Apply CPU Affinity on Startup")
         for key, label_key in [('system', 'color_system'), ('free', 'color_free'), ('gpu', 'color_gpu'), ('gpu_free', 'color_gpu_free'), ('vmem', 'color_vmem')]:
             if key in self.color_buttons: self.color_buttons[key][0].setText(t[label_key])
         self.combo_lang.blockSignals(True)
@@ -545,7 +553,9 @@ class SettingsDialog(QDialog):
         self.update_toggle_text()
 
     def update_toggle_text(self):
-        t = I18N[self.settings['lang']]
+        lang = self.settings.get('lang', 'zh')
+        if lang not in I18N: lang = 'zh'
+        t = I18N[lang]
         if hasattr(self, 'lbl_mode_text'): self.lbl_mode_text.setText(t['view_program'] if self.btn_view_mode.isChecked() else t['view_process'])
         if hasattr(self, 'lbl_close_text'): self.lbl_close_text.setText(t['close_to_tray'] if self.btn_close_behavior.isChecked() else t['close_quit'])
         
@@ -560,7 +570,7 @@ class SettingsDialog(QDialog):
         
         for lbl, btn in toggles:
             if lbl:
-                lbl.setText(("开启" if btn.isChecked() else "关闭") if self.settings['lang'] == 'zh' else ("ON" if btn.isChecked() else "OFF"))
+                lbl.setText(("开启" if btn.isChecked() else "关闭") if lang == 'zh' else ("ON" if btn.isChecked() else "OFF"))
 
     def sync_settings(self):
         self.settings['refresh_rate'] = int(self.spin_refresh.value() * 1000)
@@ -584,7 +594,7 @@ class SettingsDialog(QDialog):
             for row, (path, cfg) in enumerate(cpu_configs.items()):
                 name = cfg.get('name', os.path.basename(path))
                 cpus = cfg.get('cpus', [])
-                cpus_str = ', '.join(map(str, sorted(cpus))) if cpus else ("无" if self.settings['lang'] == 'zh' else "None")
+                cpus_str = ', '.join(map(str, sorted(cpus))) if cpus else ("无" if self.settings.get('lang', 'zh') == 'zh' else "None")
                 for col, text in enumerate([name, path, cpus_str]):
                     it = QTableWidgetItem(text); it.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                     self.cpu_config_list.setItem(row, col, it)
