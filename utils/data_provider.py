@@ -515,6 +515,10 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
     sys_group.data['vmem'] = sum(p.data.get('vmem', 0) for p in top_procs)
     root_items.append(sys_group)
 
+    # 获取 GPU 数据
+    total_gpu_total = 0
+    total_gpu_used_corrected = 0
+    
     if show_gpu_free or show_gpu_used:
         try:
             # 传入静默模式标志
@@ -529,6 +533,13 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                     free_bytes = gpu_info.get('free', total_bytes - used_bytes)
                     proc_map = gpu_info.get('processes', {})
                 
+                    # 状态栏统计累加
+                    total_gpu_total += total_bytes
+                    # 这里的修正只用于计算状态栏百分比，确保与 TreeMap 的“视觉占用”一致
+                    current_proc_sum = sum(p['mem'] for p in proc_map.values()) if isinstance(proc_map, dict) and any(isinstance(v, dict) for v in proc_map.values()) else sum(v for v in proc_map.values() if isinstance(v, (int, float)))
+                    display_used_bytes = max(used_bytes, current_proc_sum)
+                    total_gpu_used_corrected += display_used_bytes
+
                     # 1. GPU 可用部分 (顶级块，模仿内存分析)
                     if show_gpu_free and free_bytes > 0:
                         g_free_name = f"{g_name} - {t['gpu_free']}" if len(gpu_list) > 1 else t['gpu_free']
@@ -536,10 +547,8 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                     
                     # 2. GPU 使用部分 (顶级块)
                     if show_gpu_used:
-                        # 确保 used_bytes 至少有数据，如果报告为 0 但有进程或 LUID 匹配，则修正它
-                        display_used_bytes = max(used_bytes, sum(p['mem'] for p in proc_map.values()) if isinstance(proc_map, dict) and any(isinstance(v, dict) for v in proc_map.values()) else sum(v for v in proc_map.values() if isinstance(v, (int, float))))
-                        
                         g_used_name = f"{g_name} - {t['gpu_used']}" if len(gpu_list) > 1 else t['gpu_used']
+                        # TreeMap 绘图依然使用 display_used_bytes (保持原样)
                         gpu_used_group = TreeMapItem(g_used_name, display_used_bytes, "gpu")
                         
                         # 构建进程列表
@@ -547,18 +556,12 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                         for pid, data in proc_map.items():
                             used_mem = data['mem'] if isinstance(data, dict) else data
                             proc_name = None
-                            
-                            # 1. 优先使用从 XML 获取到的进程名
                             if isinstance(data, dict) and data.get('name'):
                                 proc_name = os.path.basename(data['name'])
-                                
-                            # 2. 备选方案：通过扩展函数获取
                             if not proc_name:
                                 proc_name = get_process_name_extended(pid)
-                            
                             current_gpu_procs.append(TreeMapItem(proc_name, used_mem, "gpu", data={'pid': pid}))
                         
-                        # 按程序聚合或独立显示
                         if view_mode == 'program':
                             agg_gpu = {}
                             for p in current_gpu_procs:
@@ -571,31 +574,29 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                         else:
                             final_gpu_procs = current_gpu_procs
                             
-                        # 归一化处理：如果通过 PowerShell 获取的数据总和超过了 nvidia-smi 报告的总占用
-                        # 则按比例缩小，确保可视化比例准确
                         allocated_gpu = sum(p.value for p in final_gpu_procs)
-                        if allocated_gpu > used_bytes and used_bytes > 0:
-                            scale = used_bytes / allocated_gpu
+                        if allocated_gpu > display_used_bytes and display_used_bytes > 0:
+                            scale = display_used_bytes / allocated_gpu
                             for p in final_gpu_procs:
                                 p.value *= scale
-                            allocated_gpu = used_bytes
+                            allocated_gpu = display_used_bytes
 
-                        # 计算未分配的显存（系统保留或其他）
-                        if used_bytes > allocated_gpu:
-                            others_mem = used_bytes - allocated_gpu
+                        if display_used_bytes > allocated_gpu:
+                            others_mem = display_used_bytes - allocated_gpu
                             final_gpu_procs.append(TreeMapItem(
                                 t.get('gpu_others', "显存常驻/其他"), 
                                 others_mem, 
                                 "gpu"
                             ))
                         
-                        # 按显存占用排序
                         gpu_used_group.children = sorted(final_gpu_procs, key=lambda x: x.value, reverse=True)
                         if gpu_used_group.value > 0:
                             root_items.append(gpu_used_group)
         except Exception as e:
             print(f"GPU Data Error: {e}")
             traceback.print_exc()
-    
-    return root_items
+
+    # 计算最终要给状态栏显示的百分比
+    final_gpu_percent = (total_gpu_used_corrected / total_gpu_total * 100) if total_gpu_total > 0 else 0
+    return root_items, final_gpu_percent
 

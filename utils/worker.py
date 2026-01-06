@@ -39,20 +39,8 @@ class DataWorker(QObject):
                 self.optimize_memory()
                 self.last_optimize_time = current_time
 
-            root_items = get_memory_data(show_free, show_gpu_free, show_gpu_used, lang, view_mode, is_silent)
+            root_items, gpu_percent = get_memory_data(show_free, show_gpu_free, show_gpu_used, lang, view_mode, is_silent)
             
-            # 计算总体的显存占用百分比 (不受显示设置影响)
-            gpu_percent = 0
-            try:
-                gpu_list = GPUMonitor.get_gpu_info(is_silent)
-                if gpu_list:
-                    total_gpu_mem = sum(g['total'] for g in gpu_list)
-                    used_gpu_mem = sum(g['used'] for g in gpu_list)
-                    if total_gpu_mem > 0:
-                        gpu_percent = (used_gpu_mem / total_gpu_mem) * 100
-            except:
-                pass
-
             vm = psutil.virtual_memory()
             swap = psutil.swap_memory()
             vm_info = {
