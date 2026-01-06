@@ -77,6 +77,11 @@ I18N = {
         'cpu_delete': "删除选中",
         'cpu_auto_apply': "开机自动应用 CPU 配置",
         'game_mode_manual': "🎮 手动游戏模式",
+        'game_mode_active': "🎮 游戏模式运行中",
+        'game_mode_trigger': "触发进程",
+        'game_mode_ignore': "忽略此程序",
+        'game_mode_ignored_list': "已忽略的游戏列表",
+        'game_mode_remove_ignore': "取消忽略",
         'done_btn': "完成",
         'on': "开启",
         'off': "关闭"
@@ -152,6 +157,11 @@ I18N = {
         'cpu_delete': "Delete Selected",
         'cpu_auto_apply': "Auto Apply CPU Affinity on Startup",
         'game_mode_manual': "🎮 Manual Game Mode",
+        'game_mode_active': "🎮 Game Mode Active",
+        'game_mode_trigger': "Triggered by",
+        'game_mode_ignore': "Ignore this app",
+        'game_mode_ignored_list': "Ignored Games List",
+        'game_mode_remove_ignore': "Remove",
         'done_btn': "Done",
         'on': "ON",
         'off': "OFF"
@@ -184,6 +194,7 @@ APP_CONFIG = {
     'auto_optimize': False,
     'opt_interval': 300,
     'close_to_tray': True,
+    'ignored_games': [],
     'colors': DEFAULT_COLORS.copy()
 }
 

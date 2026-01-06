@@ -436,6 +436,25 @@ class SettingsDialog(QDialog):
         self.lbl_auto_apply_cpu_text = QLabel(); self.lbl_auto_apply_cpu_text.setStyleSheet("background-color: transparent; color: #EEE;")
         auto_apply_h.addStretch(); auto_apply_h.addWidget(self.lbl_auto_apply_cpu_text); auto_apply_h.addWidget(self.btn_auto_apply_cpu)
         self._add_row(layout_cpu, self.lbl_auto_apply_cpu, auto_apply_container)
+
+        # 游戏模式忽略列表
+        layout_game, self.sec_game = self._add_section(t.get('game_mode_ignored_list', "🎮 游戏模式忽略列表"))
+        self.game_ignore_list = QTableWidget()
+        self.game_ignore_list.setColumnCount(2)
+        self.game_ignore_list.setHorizontalHeaderLabels([t.get('cpu_col_name', "Name"), t.get('cpu_col_path', "Path")])
+        self.game_ignore_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.game_ignore_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.game_ignore_list.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.game_ignore_list.setStyleSheet(self.cpu_config_list.styleSheet())
+        self.game_ignore_list.setMaximumHeight(150)
+        layout_game.addWidget(self.game_ignore_list)
+        
+        game_btn_layout = QHBoxLayout()
+        self.btn_delete_game = QPushButton(t.get('game_mode_remove_ignore', "Remove"))
+        self.btn_delete_game.clicked.connect(self.delete_ignored_game)
+        game_btn_layout.addWidget(self.btn_delete_game)
+        game_btn_layout.addStretch()
+        layout_game.addLayout(game_btn_layout)
         
         self.container.addStretch()
         scroll.setWidget(scroll_content)
@@ -469,6 +488,7 @@ class SettingsDialog(QDialog):
 
         self.retranslate_ui()
         self.refresh_cpu_configs()
+        self.refresh_ignored_games()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -569,6 +589,12 @@ class SettingsDialog(QDialog):
             self.btn_refresh_cpu.setText(t.get('cpu_refresh', "Refresh"))
             self.btn_delete_cpu.setText(t.get('cpu_delete', "Delete Selected"))
             self.lbl_auto_apply_cpu.setText(t.get('cpu_auto_apply', "Auto Apply CPU Affinity on Startup"))
+        
+        if hasattr(self, 'sec_game'):
+            self.sec_game.title_label.setText(t.get('game_mode_ignored_list', "🎮 游戏模式忽略列表"))
+            self.game_ignore_list.setHorizontalHeaderLabels([t.get('cpu_col_name', "Name"), t.get('cpu_col_path', "Path")])
+            self.btn_delete_game.setText(t.get('game_mode_remove_ignore', "Remove"))
+
         for key, label_key in [('system', 'color_system'), ('free', 'color_free'), ('gpu', 'color_gpu'), ('gpu_free', 'color_gpu_free'), ('vmem', 'color_vmem')]:
             if key in self.color_buttons: self.color_buttons[key][0].setText(t[label_key])
         self.combo_lang.blockSignals(True)
@@ -641,5 +667,31 @@ class SettingsDialog(QDialog):
                 del config['cpu_affinity'][path]
                 save_settings({'cpu_affinity': config['cpu_affinity']})
                 self.refresh_cpu_configs()
+        except: pass
+
+    def refresh_ignored_games(self):
+        try:
+            ignored = self.settings.get('ignored_games', [])
+            self.game_ignore_list.setRowCount(len(ignored))
+            from utils.data_provider import get_file_description_windows
+            for row, path in enumerate(ignored):
+                name = get_file_description_windows(path) or os.path.basename(path)
+                for col, text in enumerate([name, path]):
+                    it = QTableWidgetItem(text); it.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+                    self.game_ignore_list.setItem(row, col, it)
+        except: pass
+
+    def delete_ignored_game(self):
+        try:
+            row = self.game_ignore_list.currentRow()
+            if row < 0: return
+            path = self.game_ignore_list.item(row, 1).text()
+            ignored = self.settings.get('ignored_games', [])
+            if path in ignored:
+                ignored.remove(path)
+                self.settings['ignored_games'] = ignored
+                save_settings({'ignored_games': ignored})
+                self.refresh_ignored_games()
+                self.settingsChanged.emit()
         except: pass
 

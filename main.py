@@ -63,6 +63,9 @@ class MainWindow(QMainWindow):
         self._game_icon_pixmap = QPixmap(32, 32)
         self._render_game_icon_static()
         
+        self._current_game_name = ""
+        self._current_game_path = ""
+        
         set_process_priority()
         if 'auto_startup' not in self.settings:
             self.settings['auto_startup'] = check_startup_status()
@@ -104,8 +107,19 @@ class MainWindow(QMainWindow):
         self.game_mode_switch.setChecked(self.settings.get('game_mode_manual', False))
         self.game_mode_switch.clicked.connect(self.toggle_manual_game_mode)
         
+        # 忽略按钮 (初始隐藏)
+        self.ignore_game_btn = QPushButton("")
+        self.ignore_game_btn.setFixedSize(100, 25)
+        self.ignore_game_btn.setStyleSheet("""
+            QPushButton { background-color: #A33; color: white; border: none; font-size: 11px; border-radius: 3px; }
+            QPushButton:hover { background-color: #C44; }
+        """)
+        self.ignore_game_btn.setVisible(False)
+        self.ignore_game_btn.clicked.connect(self.ignore_current_game)
+
         game_mode_layout.addWidget(self.game_mode_lbl)
         game_mode_layout.addWidget(self.game_mode_switch, 0, Qt.AlignmentFlag.AlignVCenter)
+        game_mode_layout.addWidget(self.ignore_game_btn)
 
         self.settings_btn = QPushButton("")
         self.settings_btn.setFixedSize(80, 25)
@@ -268,6 +282,24 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'action_show'): self.action_show.setText(t.get('tray_show', 'Show'))
         if hasattr(self, 'action_exit'): self.action_exit.setText(t.get('tray_exit', 'Exit'))
         if hasattr(self, 'game_mode_lbl'): self.game_mode_lbl.setText(t.get('game_mode_manual', 'Game Mode'))
+        if hasattr(self, 'ignore_game_btn'): self.ignore_game_btn.setText(t.get('game_mode_ignore', 'Ignore'))
+
+    def _show_ignore_button(self, show):
+        if hasattr(self, 'ignore_game_btn'):
+            if self.ignore_game_btn.isVisible() != show:
+                self.ignore_game_btn.setVisible(show)
+
+    def ignore_current_game(self):
+        """将当前触发游戏模式的程序加入忽略列表"""
+        if self._current_game_path:
+            if 'ignored_games' not in self.settings:
+                self.settings['ignored_games'] = []
+            
+            if self._current_game_path not in self.settings['ignored_games']:
+                self.settings['ignored_games'].append(self._current_game_path)
+                save_settings(self.settings)
+                # 立即刷新，退出游戏模式
+                self.update_data()
 
     def open_settings(self):
         dialog = SettingsDialog(self, self.settings)
@@ -342,9 +374,17 @@ class MainWindow(QMainWindow):
         if isinstance(pids, int): pids = [pids]
         try:
             for pid in pids:
-                try: psutil.Process(pid).terminate()
+                try: 
+                    p = psutil.Process(pid)
+                    p.terminate()
                 except: continue
-            QTimer.singleShot(500, self.update_data)
+            
+            # 立即触发数据更新，不再等待 500ms
+            # 虽然进程退出可能需要零点几秒，但立即更新能提供更好的交互反馈
+            self.update_data()
+            
+            # 200ms 后再次静默刷新一次，确保进程彻底从列表中消失
+            QTimer.singleShot(200, self.update_data)
         except: pass
 
     def show_process_chain(self, pid):
@@ -358,6 +398,9 @@ class MainWindow(QMainWindow):
     def update_data(self):
         # 1. 优先使用手动设置，否则执行自动检测
         is_game = self.settings.get('game_mode_manual', False)
+        trigger_name = ""
+        trigger_path = ""
+        
         if not is_game:
             try:
                 fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
@@ -365,9 +408,34 @@ class MainWindow(QMainWindow):
                     sw = ctypes.windll.user32.GetSystemMetrics(0); sh = ctypes.windll.user32.GetSystemMetrics(1)
                     from ctypes import wintypes
                     rect = wintypes.RECT(); ctypes.windll.user32.GetWindowRect(fg_hwnd, ctypes.byref(rect))
+                    
+                    # 判断是否全屏
                     if rect.left <= 0 and rect.top <= 0 and rect.right >= sw and rect.bottom >= sh:
-                        if fg_hwnd != int(self.winId()): is_game = True
+                        if fg_hwnd != int(self.winId()):
+                            # 获取进程信息
+                            lpdw_pid = wintypes.DWORD()
+                            ctypes.windll.user32.GetWindowThreadProcessId(fg_hwnd, ctypes.byref(lpdw_pid))
+                            pid = lpdw_pid.value
+                            
+                            try:
+                                p = psutil.Process(pid)
+                                exe_path = p.exe()
+                                # 检查是否在忽略列表中 (匹配路径或文件名)
+                                ignored_list = self.settings.get('ignored_games', [])
+                                if exe_path not in ignored_list and p.name() not in ignored_list:
+                                    is_game = True
+                                    trigger_path = exe_path
+                                    # 尝试获取友好名称
+                                    from utils.data_provider import get_file_description_windows
+                                    trigger_name = get_file_description_windows(exe_path) or p.name()
+                            except:
+                                # 如果无法获取进程信息，但确实全屏且不是自己，依然进入游戏模式（兜底）
+                                is_game = True
+                                trigger_name = "Unknown Process"
             except: pass
+        
+        self._current_game_name = trigger_name
+        self._current_game_path = trigger_path
         
         # 保存状态供其他回调检查，防止覆盖图标
         self._last_is_game = is_game
@@ -378,10 +446,22 @@ class MainWindow(QMainWindow):
         if is_game:
             lang = self.settings.get('lang', 'zh')
             t = I18N.get(lang, I18N['zh'])
-            self.status_label.setText(f"🎮 {t.get('game_mode_manual', 'Game Mode')}: {t.get('on', 'Active')}")
+            
+            # 显示触发进程名
+            status_text = f"🎮 {t.get('game_mode_active', 'Game Mode Active')}"
+            if trigger_name:
+                status_text += f" | {t.get('game_mode_trigger', 'Trigger')}: {trigger_name}"
+                # 如果是自动触发的，显示忽略按钮（通过 status_label 的交互不太方便，我们在 top_bar 加个临时按钮）
+                self._show_ignore_button(True)
+            else:
+                self._show_ignore_button(False)
+                
+            self.status_label.setText(status_text)
             if self.timer.interval() != 30000: self.timer.setInterval(30000)
             self.update_tray_icon(0, 0, 0)
             return
+        
+        self._show_ignore_button(False)
         is_focused = False
         try: is_focused = (ctypes.windll.user32.GetForegroundWindow() == int(self.winId()))
         except: pass

@@ -421,78 +421,143 @@ class GPUMonitor:
             
         return all_gpus
 
+import ctypes
+from ctypes import wintypes
+
+_proc_description_cache = {}
+_proc_root_cache = {}
+
+def get_window_title_windows(pid):
+    """获取进程主窗口的标题"""
+    try:
+        # 这种方式比较轻量，虽然不一定能抓到所有窗口，但对 App 很有效
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        titles = []
+        
+        def enum_windows_proc(hwnd, lparam):
+            if not ctypes.windll.user32.IsWindowVisible(hwnd): return True
+            lpdw_pid = wintypes.DWORD()
+            ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(lpdw_pid))
+            if lpdw_pid.value == lparam:
+                length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    ctypes.windll.user32.GetWindowTextW(hwnd, buf, length + 1)
+                    titles.append(buf.value)
+            return True
+        
+        ctypes.windll.user32.EnumWindows(WNDENUMPROC(enum_windows_proc), pid)
+        return titles[0] if titles else None
+    except: return None
+
+def get_file_description_windows(path):
+    """获取文件属性里的描述信息"""
+    if not path or not os.path.exists(path): return None
+    try:
+        dwLen = ctypes.windll.version.GetFileVersionInfoSizeW(path, None)
+        if dwLen == 0: return None
+        lpData = ctypes.create_string_buffer(dwLen)
+        if not ctypes.windll.version.GetFileVersionInfoW(path, 0, dwLen, lpData): return None
+        uLen = wintypes.UINT(); lpBuffer = ctypes.c_void_p()
+        if not ctypes.windll.version.VerQueryValueW(lpData, "\\VarFileInfo\\Translation", ctypes.byref(lpBuffer), ctypes.byref(uLen)): return None
+        if uLen.value < 4: return None
+        lang, codepage = ctypes.cast(lpBuffer, ctypes.POINTER(ctypes.c_uint16))[:2]
+        sub_block = f"\\StringFileInfo\\{lang:04x}{codepage:04x}\\FileDescription"
+        if ctypes.windll.version.VerQueryValueW(lpData, sub_block, ctypes.byref(lpBuffer), ctypes.byref(uLen)):
+            return ctypes.wstring_at(lpBuffer)
+    except: pass
+    return None
+
 def get_process_name_extended(pid):
-    """更强大的进程名获取，处理权限受限的情况"""
+    """获取进程的扩展名称 (窗口标题 > 文件描述 > 进程名)"""
     try:
         p = psutil.Process(pid)
-        return p.name()
-    except (psutil.NoSuchProcess, psutil.AccessDenied):
-        try:
-            # 尝试通过 ctypes 调用 Windows API
-            import ctypes
-            from ctypes import wintypes
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            h = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-            if h:
-                buffer = ctypes.create_unicode_buffer(1024)
-                size = wintypes.DWORD(1024)
-                if ctypes.windll.kernel32.QueryFullProcessImageNameW(h, 0, buffer, ctypes.byref(size)):
-                    name = os.path.basename(buffer.value)
-                    ctypes.windll.kernel32.CloseHandle(h)
-                    return name
-                ctypes.windll.kernel32.CloseHandle(h)
-        except:
-            pass
-    return f"PID {pid}"
+        exe_path = p.exe()
+        
+        # 1. 窗口标题
+        win_title = get_window_title_windows(pid)
+        if win_title: return win_title
+        
+        # 2. 文件描述
+        file_desc = get_file_description_windows(exe_path)
+        if file_desc: return file_desc
+        
+        # 3. 进程名 (去掉 .exe)
+        name = p.name()
+        return name[:-4] if name.lower().endswith('.exe') else name
+    except:
+        return f"PID {pid}"
 
 def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang='zh', view_mode='process', is_silent=False):
-    vm = psutil.virtual_memory()
-    t = I18N[lang]
-    root_items = []
-    
+    vm = psutil.virtual_memory(); t = I18N[lang]; root_items = []
     total_used_bytes = vm.total - vm.available
-    
-    if show_free:
-        free_group = TreeMapItem(t['free_mem'], vm.available, "free")
-        root_items.append(free_group)
-    
+    if show_free: root_items.append(TreeMapItem(t['free_mem'], vm.available, "free"))
     sys_group = TreeMapItem(t['sys_mem'], total_used_bytes, "system")
-    procs = []
-    total_proc_private = 0
+    procs = []; total_proc_private = 0
     
-    for p in psutil.process_iter(['pid', 'name', 'memory_info']):
-        # 优化：在遍历大列表时强制让出 CPU 毫秒级时间片
-        # 静默模式下稍微加长 sleep 时间，更彻底地释放 CPU
-        time.sleep(0.002 if is_silent else 0.001)
+    # 获取桌面壳层 PID 作为溯源终点
+    explorer_pid = None
+    for p in psutil.process_iter(['pid', 'name']):
+        if p.info['name'].lower() == 'explorer.exe':
+            explorer_pid = p.info['pid']; break
+
+    # 1. 采集基础数据
+    pid_map = {}
+    for p in psutil.process_iter(['pid', 'name', 'memory_info', 'exe', 'ppid']):
+        time.sleep(0.001)
         try:
             m_info = p.info['memory_info']
             if not m_info: continue
-            
-            # 采集物理内存(rss)和私有总占用(private)
             m_rss = m_info.rss
             m_private = getattr(m_info, 'private', m_rss)
-            m_vmem = max(0, m_private - m_rss)
-            
-            # 使用总占用作为色块大小
             m_total = m_private
             
             if m_total > 2 * 1024 * 1024:
-                p_name = p.info['name']
-                if not p_name:
-                    p_name = get_process_name_extended(p.info['pid'])
-                procs.append(TreeMapItem(p_name, m_total, "system", data={'pid': p.info['pid'], 'rss': m_rss, 'vmem': m_vmem}))
+                pid = p.info['pid']
+                real_name = get_process_name_extended(pid)
+                
+                item = TreeMapItem(real_name, m_total, "system", data={
+                    'pid': pid, 'ppid': p.info.get('ppid'), 'rss': m_rss, 
+                    'vmem': max(0, m_private - m_rss), 'exe_name': p.info['name']
+                })
+                procs.append(item)
+                pid_map[pid] = item
                 total_proc_private += m_private
         except: continue
-            
+
     if view_mode == 'program':
         aggregated = {}
+        # 智能溯源算法
         for p in procs:
-            if p.name not in aggregated:
-                aggregated[p.name] = TreeMapItem(p.name, 0, "system", data={'is_group': True, 'rss': 0, 'vmem': 0})
-            aggregated[p.name].value += p.value
-            aggregated[p.name].data['rss'] += p.data['rss']
-            aggregated[p.name].data['vmem'] += p.data['vmem']
-            aggregated[p.name].children.append(p)
+            curr_pid = p.data['pid']
+            family_path = []
+            
+            # 往上找爸爸
+            while True:
+                parent_pid = pid_map[curr_pid].data.get('ppid') if curr_pid in pid_map else None
+                if not parent_pid or parent_pid == explorer_pid or parent_pid not in pid_map:
+                    break
+                if parent_pid in family_path: break # 死循环保护
+                family_path.append(curr_pid)
+                curr_pid = parent_pid
+            
+            # curr_pid 现在是该全家桶的“祖宗”
+            root_item = pid_map.get(curr_pid, p)
+            # 组名用祖宗的友好名称
+            group_key = curr_pid
+            group_name = root_item.data.get('file_desc') or root_item.data.get('exe_name') or root_item.name
+            
+            if group_key not in aggregated:
+                aggregated[group_key] = TreeMapItem(group_name, 0, "system", data={'is_group': True, 'rss': 0, 'vmem': 0})
+            
+            group = aggregated[group_key]
+            group.value += p.value
+            group.data['rss'] += p.data.get('rss', 0)
+            group.data['vmem'] += p.data.get('vmem', 0)
+            
+            # 子项保留自己的名字，但带上 PID
+            p.name = f"{p.name} (PID: {p.data['pid']})"
+            group.children.append(p)
         final_procs = list(aggregated.values())
     else:
         final_procs = procs
