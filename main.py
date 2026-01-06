@@ -33,7 +33,7 @@ try:
     from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                                  QHBoxLayout, QLabel, QPushButton, QMenu, QSystemTrayIcon)
     from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QThread, QPointF
-    from PyQt6.QtGui import QPainter, QColor, QBrush, QAction
+    from PyQt6.QtGui import QPainter, QColor, QBrush, QAction, QFont
 
     from config import I18N, load_settings, save_settings
     from utils.treemap_logic import TreeMapItem
@@ -53,9 +53,17 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        # 1. 加载配置
+        from config import load_settings
+        self.settings = load_settings()
+        # 2. 状态锁初始化 (从配置读取)
+        self._last_is_game = self.settings.get('game_mode_manual', False)
+        
+        # 3. 预渲染游戏模式图标，确保切换时绝对成功
+        self._game_icon_pixmap = QPixmap(32, 32)
+        self._render_game_icon_static()
         
         set_process_priority()
-        self.settings = load_settings()
         if 'auto_startup' not in self.settings:
             self.settings['auto_startup'] = check_startup_status()
         
@@ -76,19 +84,39 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(5, 2, 5, 2)
+        top_bar.setSpacing(10) # 增加组件间的间距
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color: #00FF00; font-family: Consolas; font-size: 13px; padding: 2px;")
         self.status_label.setFixedHeight(25)
         
+        # 手动游戏模式开关容器
+        game_mode_container = QWidget()
+        game_mode_layout = QHBoxLayout(game_mode_container)
+        game_mode_layout.setContentsMargins(0, 0, 0, 0)
+        game_mode_layout.setSpacing(8) # 文本和开关之间的距离
+        
+        self.game_mode_lbl = QLabel("")
+        self.game_mode_lbl.setStyleSheet("color: #BBB; font-size: 12px;")
+        from ui.components import SwitchButton
+        self.game_mode_switch = SwitchButton()
+        self.game_mode_switch.setFixedSize(46, 22) # 修正：宽度改为偶数，高度保持
+        self.game_mode_switch.setChecked(self.settings.get('game_mode_manual', False))
+        self.game_mode_switch.clicked.connect(self.toggle_manual_game_mode)
+        
+        game_mode_layout.addWidget(self.game_mode_lbl)
+        game_mode_layout.addWidget(self.game_mode_switch, 0, Qt.AlignmentFlag.AlignVCenter)
+
         self.settings_btn = QPushButton("")
         self.settings_btn.setFixedSize(80, 25)
         self.settings_btn.setStyleSheet("""
-            QPushButton { background-color: #3E3E42; color: #CCC; border: none; font-size: 12px; }
+            QPushButton { background-color: #3E3E42; color: #CCC; border: none; font-size: 12px; border-radius: 3px; }
             QPushButton:hover { background-color: #505050; color: white; }
         """)
         self.settings_btn.clicked.connect(self.open_settings)
         
         top_bar.addWidget(self.status_label, 1)
+        top_bar.addWidget(game_mode_container)
         top_bar.addWidget(self.settings_btn)
         layout.addLayout(top_bar)
 
@@ -116,7 +144,7 @@ class MainWindow(QMainWindow):
     def init_tray(self):
         try:
             self.tray_icon = QSystemTrayIcon(self)
-            self.update_tray_icon(0, 0)
+            self.update_tray_icon(0, 0, 0)
             self.tray_menu = QMenu()
             self.tray_menu.setStyleSheet("QMenu { background-color: #252526; color: white; border: 1px solid #444; } QMenu::item { padding: 5px 20px; } QMenu::item:selected { background-color: #094771; }")
             self.action_show = QAction("", self)
@@ -136,6 +164,31 @@ class MainWindow(QMainWindow):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             if self.isVisible(): self.hide()
             else: self.show_normal()
+
+    def toggle_manual_game_mode(self):
+        """手动切换游戏模式"""
+        enabled = self.game_mode_switch.isChecked()
+        self.settings['game_mode_manual'] = enabled
+        self._last_is_game = enabled # 立即强制同步状态锁
+        save_settings(self.settings)
+        self.update_data()
+        self.update_tray_icon(0, 0, 0) # 立即触发重绘
+
+    def _render_game_icon_static(self):
+        """预渲染游戏图标到缓存"""
+        self._game_icon_pixmap.fill(Qt.GlobalColor.transparent)
+        with QPainter(self._game_icon_pixmap) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            # 紫色背景
+            painter.setBrush(QBrush(QColor(156, 39, 176)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(self._game_icon_pixmap.rect().adjusted(2, 2, -2, -2), 6, 6)
+            # 手柄
+            font = QFont("Segoe UI Emoji")
+            font.setPixelSize(22)
+            painter.setFont(font)
+            painter.setPen(QColor(255, 255, 255))
+            painter.drawText(self._game_icon_pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "🎮")
 
     def apply_saved_cpu_affinity(self):
         try:
@@ -161,31 +214,44 @@ class MainWindow(QMainWindow):
 
     def update_tray_icon(self, ram_percent, gpu_percent, v_percent=0):
         try:
+            # 双重保险：同时检查配置和状态锁
+            is_game = self.settings.get('game_mode_manual', False) or getattr(self, '_last_is_game', False)
+            
+            if is_game:
+                # 【终极拦截】游戏模式下直接输出预制图标，绝不执行绘图逻辑
+                game_icon = QIcon(self._game_icon_pixmap)
+                self.tray_icon.setIcon(game_icon)
+                self.setWindowIcon(game_icon)
+                return
+            
+            # --- 以下仅在非游戏模式运行 ---
             pixmap = QPixmap(32, 32)
             pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            bar_count = 4; spacing = 3; bar_width = (32 - (bar_count + 1) * spacing) // bar_count; max_h = 24
-            has_gpu = gpu_percent > 0 or self.settings.get('show_gpu_used', True)
-            for i in range(bar_count):
-                percent = gpu_percent if (has_gpu and i >= 2) else ram_percent
-                if percent < 60: color = QColor(0, 255, 100)
-                elif percent < 85: color = QColor(255, 200, 0)
-                else: color = QColor(255, 50, 50)
-                h = max(2, min(max_h, int((percent / 100.0) * max_h) + random.randint(-2, 2) if percent > 0 else 0))
-                x = spacing + i * (bar_width + spacing)
-                painter.setBrush(QBrush(QColor(60, 60, 60))); painter.setPen(Qt.GlobalColor.transparent); painter.drawRect(x, 32 - spacing - max_h, bar_width, max_h)
-                painter.setBrush(QBrush(color)); painter.drawRect(x, 32 - spacing - h, bar_width, h)
-            painter.end()
-            self.tray_icon.setIcon(QIcon(pixmap))
+            with QPainter(pixmap) as painter:
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                bar_count = 4; spacing = 3; bar_width = (32 - (bar_count + 1) * spacing) // bar_count; max_h = 24
+                has_gpu = gpu_percent > 0 or self.settings.get('show_gpu_used', True)
+                for i in range(bar_count):
+                    percent = gpu_percent if (has_gpu and i >= 2) else ram_percent
+                    color = QColor(0, 255, 100) if percent < 60 else (QColor(255, 200, 0) if percent < 85 else QColor(255, 50, 50))
+                    h = max(2, min(max_h, int((percent / 100.0) * max_h) + random.randint(-2, 2) if percent > 0 else 0))
+                    x = spacing + i * (bar_width + spacing)
+                    painter.setBrush(QBrush(QColor(60, 60, 60))); painter.setPen(Qt.GlobalColor.transparent); painter.drawRect(x, 32 - spacing - max_h, bar_width, max_h)
+                    painter.setBrush(QBrush(color)); painter.drawRect(x, 32 - spacing - h, bar_width, h)
+            
+            icon = QIcon(pixmap)
+            self.tray_icon.setIcon(icon)
+            self.setWindowIcon(icon)
+            
+            # 更新悬停提示
             lang = self.settings.get('lang', 'zh')
-            if lang not in I18N: lang = 'zh'
-            t = I18N[lang]
+            t = I18N.get(lang, I18N['zh'])
             tooltip = f"{t.get('sys_mem', 'RAM')}: {ram_percent}%"
             if has_gpu: tooltip += f" | {t.get('gpu_mem', 'GPU')}: {int(gpu_percent)}%"
             tooltip += f" | {t.get('virtual_memory', 'Swap')}: {int(v_percent)}%"
             self.tray_icon.setToolTip(tooltip)
-        except: pass
+        except Exception as e:
+            print(f"Tray Icon Update Error: {e}")
 
     def show_normal(self):
         self.show(); self.activateWindow()
@@ -201,6 +267,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'settings_btn'): self.settings_btn.setText(t.get('settings_btn', 'Settings'))
         if hasattr(self, 'action_show'): self.action_show.setText(t.get('tray_show', 'Show'))
         if hasattr(self, 'action_exit'): self.action_exit.setText(t.get('tray_exit', 'Exit'))
+        if hasattr(self, 'game_mode_lbl'): self.game_mode_lbl.setText(t.get('game_mode_manual', 'Game Mode'))
 
     def open_settings(self):
         dialog = SettingsDialog(self, self.settings)
@@ -209,6 +276,10 @@ class MainWindow(QMainWindow):
 
     def on_settings_changed(self):
         self.apply_i18n(); save_settings(self.settings)
+        if hasattr(self, 'game_mode_switch'):
+            self.game_mode_switch.blockSignals(True)
+            self.game_mode_switch.setChecked(self.settings.get('game_mode_manual', False))
+            self.game_mode_switch.blockSignals(False)
         if hasattr(self, 'treemap'): self.treemap.set_colors(self.settings.get('colors', {}))
         update_startup_registry(self.settings.get('auto_startup', False))
         self.timer.stop(); self.timer.start(self.settings.get('refresh_rate', 2000))
@@ -285,21 +356,31 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def update_data(self):
-        is_game = False
-        try:
-            fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
-            if fg_hwnd:
-                sw = ctypes.windll.user32.GetSystemMetrics(0); sh = ctypes.windll.user32.GetSystemMetrics(1)
-                from ctypes import wintypes
-                rect = wintypes.RECT(); ctypes.windll.user32.GetWindowRect(fg_hwnd, ctypes.byref(rect))
-                if rect.left <= 0 and rect.top <= 0 and rect.right >= sw and rect.bottom >= sh:
-                    if fg_hwnd != int(self.winId()): is_game = True
-        except: pass
+        # 1. 优先使用手动设置，否则执行自动检测
+        is_game = self.settings.get('game_mode_manual', False)
+        if not is_game:
+            try:
+                fg_hwnd = ctypes.windll.user32.GetForegroundWindow()
+                if fg_hwnd:
+                    sw = ctypes.windll.user32.GetSystemMetrics(0); sh = ctypes.windll.user32.GetSystemMetrics(1)
+                    from ctypes import wintypes
+                    rect = wintypes.RECT(); ctypes.windll.user32.GetWindowRect(fg_hwnd, ctypes.byref(rect))
+                    if rect.left <= 0 and rect.top <= 0 and rect.right >= sw and rect.bottom >= sh:
+                        if fg_hwnd != int(self.winId()): is_game = True
+            except: pass
+        
+        # 保存状态供其他回调检查，防止覆盖图标
+        self._last_is_game = is_game
+        
         if hasattr(self, 'treemap'):
             if self.treemap.is_game_mode != is_game: self.treemap.is_game_mode = is_game; self.treemap.update()
+            
         if is_game:
-            self.status_label.setText("🎮 Detection Fullscreen Gaming: Paused")
+            lang = self.settings.get('lang', 'zh')
+            t = I18N.get(lang, I18N['zh'])
+            self.status_label.setText(f"🎮 {t.get('game_mode_manual', 'Game Mode')}: {t.get('on', 'Active')}")
             if self.timer.interval() != 30000: self.timer.setInterval(30000)
+            self.update_tray_icon(0, 0, 0)
             return
         is_focused = False
         try: is_focused = (ctypes.windll.user32.GetForegroundWindow() == int(self.winId()))
@@ -326,7 +407,17 @@ class MainWindow(QMainWindow):
                     graph_phys_used += child.data.get('rss', 0); graph_virt_used += child.data.get('vmem', 0)
             
             total_ram = vm_info.get('total', 1); v_total = vm_info.get('v_total', 1)
-            percent = (graph_phys_used / total_ram * 100); sw_percent = (graph_virt_used / max(1, v_total - total_ram) * 100)
+            # 计算虚拟内存总量 (Disk Swap)
+            # 如果 Commit Limit 小于等于物理内存，说明没开分页文件，此时缓存总量记为已用量，避免显示 0.0G
+            sw_total_val = max(graph_virt_used, v_total - total_ram)
+            
+            percent = (graph_phys_used / total_ram * 100)
+            # 保护：防止除以 0，且限制最大值为 100%
+            if sw_total_val > 0:
+                sw_percent = min(100.0, (graph_virt_used / sw_total_val * 100))
+            else:
+                sw_percent = 100.0 if graph_virt_used > 0 else 0.0
+            
             total_used = graph_phys_used + graph_virt_used; v_percent = (total_used / v_total * 100)
             gpu_percent = vm_info.get('gpu_percent', 0)
             
@@ -336,9 +427,23 @@ class MainWindow(QMainWindow):
             except: pass
             
             status_fmt = t.get('status_format', "RAM: {used:.1f}G/{total:.1f}G ({percent}%) | Procs: {pids}")
-            status = status_fmt.format(used=graph_phys_used/(1024**3), total=total_ram/(1024**3), v_used=total_used/(1024**3), v_total=v_total/(1024**3), sw_used=graph_virt_used/(1024**3), sw_total=(v_total - total_ram)/(1024**3), percent=int(percent), v_percent=int(v_percent), sw_percent=int(sw_percent), pids=vm_info.get('pids', 0))
+            status = status_fmt.format(
+                used=graph_phys_used/(1024**3), 
+                total=total_ram/(1024**3), 
+                v_used=total_used/(1024**3), 
+                v_total=v_total/(1024**3), 
+                sw_used=graph_virt_used/(1024**3), 
+                sw_total=sw_total_val/(1024**3), 
+                percent=int(percent), 
+                gpu_percent=int(gpu_percent),
+                v_percent=int(v_percent), 
+                sw_percent=int(sw_percent), 
+                pids=vm_info.get('pids', 0)
+            )
             if warnings: status += " | " + " | ".join(warnings)
             self.status_label.setText(status)
+            
+            # 始终尝试更新，update_tray_icon 内部会根据 _last_is_game 决定内容
             self.update_tray_icon(int(percent), int(gpu_percent), v_percent)
         except Exception as e:
             print(f"UI Update Error: {e}")

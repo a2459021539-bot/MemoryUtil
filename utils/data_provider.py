@@ -10,7 +10,11 @@ from utils.treemap_logic import TreeMapItem
 from config import I18N
 
 try:
-    import pynvml
+    import warnings
+    # 抑制 pynvml 模块抛出的 FutureWarning
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        import pynvml
     PYNVML_AVAILABLE = True
 except ImportError:
     PYNVML_AVAILABLE = False
@@ -319,30 +323,103 @@ class GPUMonitor:
         return gpu_list
     
     @staticmethod
+    def get_generic_gpu_info():
+        """使用 WMI 获取所有显卡（含核显）的基础信息"""
+        gpu_list = []
+        if sys.platform != 'win32': return []
+        
+        try:
+            # 1. 通过 WMI 获取显卡列表
+            cmd = "wmic path Win32_VideoController get Name, AdapterRAM /format:csv"
+            output = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL, timeout=5).decode('utf-8', errors='ignore')
+            
+            # 2. 获取 LUID 数据（通用，含核显）
+            windows_proc_mem_by_luid = GPUMonitor.get_gpu_process_memory_windows()
+            luid_totals = {luid: sum(procs.values()) for luid, procs in windows_proc_mem_by_luid.items()}
+            
+            # 记录已经通过 NVIDIA SMI 识别出的 LUID (后续可以传入或者根据已用量排除)
+            # 这里暂时使用简单的过滤逻辑
+            
+            lines = [l.strip() for l in output.splitlines() if l.strip()]
+            for line in lines[1:]: # 跳过标题
+                parts = line.split(',')
+                if len(parts) < 3: continue
+                name = parts[2].strip()
+                
+                # 排除显而易见的独显或已经支持的
+                if "NVIDIA" in name.upper(): continue
+                
+                # AdapterRAM 处理
+                try:
+                    # 某些核显会返回 4GB-1 (4294967295)，这其实是无效值
+                    ram_val = int(parts[1])
+                    if ram_val >= 4294967295 or ram_val < 0:
+                        total_bytes = psutil.virtual_memory().total // 2 # 兜底方案：取系统内存一半作为共享上限
+                    else:
+                        total_bytes = ram_val
+                except:
+                    total_bytes = psutil.virtual_memory().total // 2
+                
+                # 匹配 LUID
+                # 启发式匹配：寻找一个未被 NVIDIA 占用的、且有数值的 LUID
+                best_luid = None
+                used_bytes = 0
+                if luid_totals:
+                    # 这里的匹配逻辑可以进一步优化
+                    # 目前简单取所有 LUID 中的最大值（如果只有一个核显）
+                    for luid, val in luid_totals.items():
+                        if val > used_bytes:
+                            used_bytes = val
+                            best_luid = luid
+                
+                gpu_list.append({
+                    'index': 100 + len(gpu_list),
+                    'name': name,
+                    'total': total_bytes,
+                    'used': used_bytes,
+                    'free': max(0, total_bytes - used_bytes),
+                    'processes': windows_proc_mem_by_luid.get(best_luid, {}) if best_luid else {},
+                    'method': f'wmi-igpu (luid:{best_luid or "none"})'
+                })
+        except:
+            pass
+        return gpu_list
+
+    @staticmethod
     def get_gpu_info(is_silent=False):
         """
-        获取所有GPU信息，按优先级尝试：
-        1. XML格式 (nvidia-smi -q -x) - 最可靠，能获取完整进程列表
-        2. pynvml - 如果可用且XML失败
-        3. CSV格式 (nvidia-smi --query) - 最后备用
+        获取所有GPU信息，支持 NVIDIA 独显、Intel/AMD 核显等。
+        优先级：
+        1. NVIDIA 独显专用方案 (nvidia-smi / pynvml)
+        2. Windows WMI + 性能计数器方案 (适配核显)
         """
+        all_gpus = []
         try:
-            # 方案1: 优先使用XML格式（Windows上最可靠）
-            gpu_list = GPUMonitor.get_gpu_info_xml(is_silent)
-            if gpu_list:
-                return gpu_list
+            # 1. 尝试获取 NVIDIA 独显信息
+            nvidia_gpus = []
+            try:
+                nvidia_gpus = GPUMonitor.get_gpu_info_xml(is_silent)
+                if not nvidia_gpus:
+                    nvidia_gpus = GPUMonitor.get_nvidia_gpu_info()
+            except: 
+                pass
             
-            # 方案2: 尝试pynvml
-            gpu_list = GPUMonitor.get_nvidia_gpu_info()
-            if gpu_list:
-                return gpu_list
+            all_gpus.extend(nvidia_gpus)
             
-            # 方案3: 最后使用CSV格式
-            gpu_list = GPUMonitor.get_nvidia_gpu_info_fallback()
-            return gpu_list
+            # 2. 尝试获取核显或其他显卡信息
+            generic_gpus = GPUMonitor.get_generic_gpu_info()
+            for g in generic_gpus:
+                # 修正去重逻辑：检查当前显卡名是否已在 all_gpus 中
+                is_duplicate = any(g['name'].lower() == eg['name'].lower() for eg in all_gpus)
+                is_nvidia = "NVIDIA" in g['name'].upper()
+                
+                if not is_duplicate and not is_nvidia:
+                    all_gpus.append(g)
+                    
         except Exception as e:
-            print(f"Total GPU Info Error: {e}")
-            return []
+            print(f"GPU Discovery Error: {e}")
+            
+        return all_gpus
 
 def get_process_name_extended(pid):
     """更强大的进程名获取，处理权限受限的情况"""
@@ -459,8 +536,11 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                     
                     # 2. GPU 使用部分 (顶级块)
                     if show_gpu_used:
-                        g_used_name = f"{g_name} - {t['gpu_used']}" if len(gpu_list) > 1 else t['gpu_mem']
-                        gpu_used_group = TreeMapItem(g_used_name, used_bytes, "gpu")
+                        # 确保 used_bytes 至少有数据，如果报告为 0 但有进程或 LUID 匹配，则修正它
+                        display_used_bytes = max(used_bytes, sum(p['mem'] for p in proc_map.values()) if isinstance(proc_map, dict) and any(isinstance(v, dict) for v in proc_map.values()) else sum(v for v in proc_map.values() if isinstance(v, (int, float))))
+                        
+                        g_used_name = f"{g_name} - {t['gpu_used']}" if len(gpu_list) > 1 else t['gpu_used']
+                        gpu_used_group = TreeMapItem(g_used_name, display_used_bytes, "gpu")
                         
                         # 构建进程列表
                         current_gpu_procs = []
@@ -511,7 +591,8 @@ def get_memory_data(show_free=True, show_gpu_free=True, show_gpu_used=True, lang
                         
                         # 按显存占用排序
                         gpu_used_group.children = sorted(final_gpu_procs, key=lambda x: x.value, reverse=True)
-                        root_items.append(gpu_used_group)
+                        if gpu_used_group.value > 0:
+                            root_items.append(gpu_used_group)
         except Exception as e:
             print(f"GPU Data Error: {e}")
             traceback.print_exc()

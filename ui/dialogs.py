@@ -3,11 +3,11 @@ import json
 import psutil
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
                              QCheckBox, QGridLayout, QTableWidget, QTableWidgetItem, 
-                             QHeaderView, QComboBox, QDoubleSpinBox, QScrollArea, 
+                             QHeaderView, QComboBox, QScrollArea, 
                              QWidget, QFrame, QColorDialog, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QPointF, QTimer
 from PyQt6.QtGui import QColor, QFontMetrics
-from ui.components import SwitchButton
+from ui.components import SwitchButton, SafeDoubleSpinBox
 from config import I18N, save_settings, DOCS_CONFIG_FILE
 
 class ProcessChainWindow(QDialog):
@@ -312,9 +312,18 @@ class SettingsDialog(QDialog):
         self.combo_lang.setCurrentIndex(self.combo_lang.findData(self.settings.get('lang', 'zh')))
         self._add_row(layout_base, self.lbl_lang, self.combo_lang)
         self.lbl_refresh = QLabel()
-        self.spin_refresh = QDoubleSpinBox(); self.spin_refresh.setRange(0.1, 60.0)
+        self.spin_refresh = SafeDoubleSpinBox(); self.spin_refresh.setRange(0.1, 60.0)
         self.spin_refresh.setValue(self.settings.get('refresh_rate', 2000) / 1000.0)
         self._add_row(layout_base, self.lbl_refresh, self.spin_refresh)
+        
+        self.lbl_game_manual = QLabel()
+        game_manual_container = QWidget(); game_manual_container.setStyleSheet("background-color: transparent;")
+        gm_h = QHBoxLayout(game_manual_container); gm_h.setContentsMargins(0,0,0,0)
+        self.btn_game_manual = SwitchButton()
+        self.btn_game_manual.setChecked(self.settings.get('game_mode_manual', False))
+        self.lbl_game_manual_text = QLabel(); self.lbl_game_manual_text.setStyleSheet("background-color: transparent; color: #EEE;")
+        gm_h.addStretch(); gm_h.addWidget(self.lbl_game_manual_text); gm_h.addWidget(self.btn_game_manual)
+        self._add_row(layout_base, self.lbl_game_manual, game_manual_container)
 
         layout_disp, self.sec_disp = self._add_section(t.get('section_display', "📊 监控显示"))
         self.lbl_view_mode = QLabel()
@@ -366,7 +375,7 @@ class SettingsDialog(QDialog):
         auto_opt_h.addStretch(); auto_opt_h.addWidget(self.lbl_auto_opt_text); auto_opt_h.addWidget(self.btn_auto_opt)
         self._add_row(layout_opt, self.lbl_auto_opt, auto_opt_container)
         self.lbl_opt_interval = QLabel()
-        self.spin_opt_interval = QDoubleSpinBox(); self.spin_opt_interval.setRange(1.0, 3600.0)
+        self.spin_opt_interval = SafeDoubleSpinBox(); self.spin_opt_interval.setRange(1.0, 3600.0)
         self.spin_opt_interval.setValue(self.settings.get('optimize_interval', 30000) / 1000.0)
         self._add_row(layout_opt, self.lbl_opt_interval, self.spin_opt_interval)
 
@@ -447,6 +456,7 @@ class SettingsDialog(QDialog):
         
         self.combo_lang.currentIndexChanged.connect(self.on_lang_changed)
         self.spin_refresh.valueChanged.connect(self.sync_settings)
+        self.btn_game_manual.clicked.connect(self.sync_settings)
         self.btn_view_mode.clicked.connect(self.sync_settings)
         self.btn_close_behavior.clicked.connect(self.sync_settings)
         self.btn_auto_opt.clicked.connect(self.sync_settings)
@@ -533,6 +543,7 @@ class SettingsDialog(QDialog):
         t = I18N[lang]
         self.setWindowTitle(t['settings_title'])
         self.lbl_lang.setText(t['lang_label']); self.lbl_refresh.setText(t['refresh_label'])
+        self.lbl_game_manual.setText(t.get('game_mode_manual', "Manual Game Mode"))
         self.spin_refresh.setSuffix(" s"); self.lbl_view_mode.setText(t['view_mode_label'])
         self.lbl_auto_opt.setText(t.get('auto_optimize_label', 'Auto Optimize'))
         self.lbl_opt_interval.setText(t.get('opt_interval_label', 'Interval'))
@@ -571,6 +582,7 @@ class SettingsDialog(QDialog):
         t = I18N[lang]
         if hasattr(self, 'lbl_mode_text'): self.lbl_mode_text.setText(t['view_program'] if self.btn_view_mode.isChecked() else t['view_process'])
         if hasattr(self, 'lbl_close_text'): self.lbl_close_text.setText(t['close_to_tray'] if self.btn_close_behavior.isChecked() else t['close_quit'])
+        if hasattr(self, 'lbl_game_manual_text'): self.lbl_game_manual_text.setText(t.get('on', "ON") if self.btn_game_manual.isChecked() else t.get('off', "OFF"))
         
         # 修正：直接检查属性是否存在并设置文本
         toggles = [
@@ -587,6 +599,7 @@ class SettingsDialog(QDialog):
 
     def sync_settings(self):
         self.settings['refresh_rate'] = int(self.spin_refresh.value() * 1000)
+        self.settings['game_mode_manual'] = self.btn_game_manual.isChecked()
         self.settings['view_mode'] = 'program' if self.btn_view_mode.isChecked() else 'process'
         self.settings['close_to_tray'] = self.btn_close_behavior.isChecked()
         self.settings['auto_optimize'] = self.btn_auto_opt.isChecked()

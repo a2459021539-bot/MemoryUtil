@@ -85,19 +85,29 @@ class TreeMapWidget(QWidget):
 
         # 3. 第二级：GPU 区域内部拆分 (占用 vs 空闲) - 上下布局
         if gpu_w > 0:
-            gpu_used = [i for i in gpu_items if i.type == 'gpu']
-            gpu_free = [i for i in gpu_items if i.type == 'gpu_free']
-            total_gpu = sum(i.value for i in gpu_items)
+            gpu_used_list = [i for i in gpu_items if i.type == 'gpu']
+            gpu_free_list = [i for i in gpu_items if i.type == 'gpu_free']
+            
+            val_used = sum(i.value for i in gpu_used_list)
+            val_free = sum(i.value for i in gpu_free_list)
+            total_gpu_val = val_used + val_free
 
-            if gpu_used and gpu_free:
-                free_ratio = sum(i.value for i in gpu_free) / total_gpu
-                # 限制空闲高度比例
-                free_ratio = max(0.1, min(0.8, free_ratio))
+            if val_used > 0 and val_free > 0:
+                free_ratio = val_free / total_gpu_val
+                # 只有当两者都有值时，才执行比例限制 (10% - 90%)
+                free_ratio = max(0.1, min(0.9, free_ratio))
                 free_h = h * free_ratio
                 used_h = h - free_h
-                squarify_layout(gpu_used, sys_w, 0, gpu_w, used_h)
-                squarify_layout(gpu_free, sys_w, used_h, gpu_w, free_h)
+                squarify_layout(gpu_used_list, sys_w, 0, gpu_w, used_h)
+                squarify_layout(gpu_free_list, sys_w, used_h, gpu_w, free_h)
+            elif val_used > 0:
+                # 只有占用
+                squarify_layout(gpu_used_list, sys_w, 0, gpu_w, h)
+            elif val_free > 0:
+                # 只有空闲
+                squarify_layout(gpu_free_list, sys_w, 0, gpu_w, h)
             else:
+                # 兜底
                 squarify_layout(gpu_items, sys_w, 0, gpu_w, h)
         
         # 4. 第三级布局：每个分组内部的进程
@@ -129,10 +139,6 @@ class TreeMapWidget(QWidget):
                 for child in group.children:
                     self._draw_item(painter, child, is_group=False)
 
-        # 绘制游戏模式标识
-        if self.is_game_mode:
-            self._draw_game_icon(painter)
-
     def _draw_game_icon(self, painter):
         """在右下角绘制游戏图标标识"""
         margin = 10
@@ -162,7 +168,11 @@ class TreeMapWidget(QWidget):
         base_color = self.colors.get(item.type, Qt.GlobalColor.gray)
         draw_rect = rect.adjusted(0.5, 0.5, -0.5, -0.5)
 
-        if is_group:
+        # 判断是否为叶子节点（真正显示内容的节点）
+        # 如果是顶级分组但没有子节点（如“可用内存”或“GPU空闲”），它也表现得像个叶子节点
+        is_leaf_node = not item.children
+
+        if is_group and not is_leaf_node:
             # --- 顶级分组绘制 (系统内存、GPU等) ---
             painter.setPen(QPen(self.colors['border'], 1))
             painter.setBrush(QBrush(base_color.darker(150)))
@@ -181,7 +191,7 @@ class TreeMapWidget(QWidget):
                 elided_title = metrics.elidedText(title, Qt.TextElideMode.ElideRight, int(rect.width() - 10))
                 painter.drawText(header_rect.adjusted(5, 0, -5, 0), Qt.AlignmentFlag.AlignVCenter, elided_title)
         else:
-            # --- 进程/程序块绘制 ---
+            # --- 进程/程序块或独立的空闲块绘制 ---
             vmem = item.data.get('vmem', 0)
             rss = item.data.get('rss', item.value - vmem)
             
