@@ -417,7 +417,7 @@ class SettingsDialog(QDialog):
             QTableWidget { background-color: #252526; color: #EEE; gridline-color: #333; border: 1px solid #333; }
             QHeaderView::section { background-color: #333; color: white; padding: 5px; border: 1px solid #444; }
         """)
-        self.cpu_config_list.setMaximumHeight(200)
+        self._set_table_min_rows(self.cpu_config_list, 5)
         layout_cpu.addWidget(self.cpu_config_list)
         cpu_btn_layout = QHBoxLayout()
         self.btn_refresh_cpu = QPushButton(t.get('cpu_refresh', "Refresh"))
@@ -446,7 +446,7 @@ class SettingsDialog(QDialog):
         self.game_ignore_list.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.game_ignore_list.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.game_ignore_list.setStyleSheet(self.cpu_config_list.styleSheet())
-        self.game_ignore_list.setMaximumHeight(150)
+        self._set_table_min_rows(self.game_ignore_list, 5)
         layout_game.addWidget(self.game_ignore_list)
         
         game_btn_layout = QHBoxLayout()
@@ -541,6 +541,16 @@ class SettingsDialog(QDialog):
         row = QHBoxLayout()
         if label_widget: row.addWidget(label_widget)
         row.addStretch(); row.addWidget(control_widget); parent_layout.addLayout(row)
+
+    def _set_table_min_rows(self, table, min_rows=5):
+        header_h = table.horizontalHeader().height()
+        row_h = table.verticalHeader().defaultSectionSize()
+        if header_h <= 0:
+            header_h = 28
+        if row_h <= 0:
+            row_h = 30
+        min_h = header_h + row_h * min_rows + table.frameWidth() * 2
+        table.setMinimumHeight(min_h)
 
     def on_lang_changed(self):
         self.settings['lang'] = self.combo_lang.currentData()
